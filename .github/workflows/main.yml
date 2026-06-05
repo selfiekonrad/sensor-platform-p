@@ -1,0 +1,125 @@
+name: Build and Push Native Images
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.decide.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            sensor-data-ingestion-service:
+              - 'sensor-data-ingestion-service/**'
+              - 'common/**'
+              - 'db-model/**'
+              - 'pom.xml'
+            sensor-data-processing-service:
+              - 'sensor-data-processing-service/**'
+              - 'common/**'
+              - 'db-model/**'
+              - 'pom.xml'
+            sensor-management-service:
+              - 'sensor-management-service/**'
+              - 'common/**'
+              - 'db-model/**'
+              - 'pom.xml'
+            sensor-query-service:
+              - 'sensor-query-service/**'
+              - 'common/**'
+              - 'db-model/**'
+              - 'pom.xml'
+
+      - name: Decide which services to build
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'services=["sensor-data-ingestion-service","sensor-data-processing-service","sensor-management-service","sensor-query-service"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'services=${{ steps.filter.outputs.changes }}' >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    needs: setup
+    if: ${{ needs.setup.outputs.services != '[]' && needs.setup.outputs.services != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'maven'
+      - name: Run tests
+        run: mvn -B verify
+
+  build:
+    needs: [setup, test]
+    if: ${{ needs.setup.outputs.services != '[]' && needs.setup.outputs.services != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.setup.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'maven'
+
+      - name: Lowercase owner for GHCR
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get project version
+        run: |
+          V=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -pl ${{ matrix.service }})
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: Install module + dependencies
+        run: mvn install -pl ${{ matrix.service }} -am -DskipTests
+
+      - name: Build native image
+        run: |
+          mvn -Pnative spring-boot:build-image -pl ${{ matrix.service }} -DskipTests \
+            -Dspring-boot.build-image.imageName=ghcr.io/${{ env.OWNER_LC }}/${{ matrix.service }}:${{ env.APP_VERSION }}
+
+      - name: Push to GHCR
+        run: docker push ghcr.io/${{ env.OWNER_LC }}/${{ matrix.service }}:${{ env.APP_VERSION }}
+
+      - name: Build JVM image (processing only, for comparison)
+        if: matrix.service == 'sensor-data-processing-service'
+        run: |
+          mvn spring-boot:build-image -pl ${{ matrix.service }} -DskipTests \
+            -Dspring-boot.build-image.imageName=ghcr.io/${{ env.OWNER_LC }}/${{ matrix.service }}:${{ env.APP_VERSION }}-jvm
+
+      - name: Push JVM image to GHCR
+        if: matrix.service == 'sensor-data-processing-service'
+        run: docker push ghcr.io/${{ env.OWNER_LC }}/${{ matrix.service }}:${{ env.APP_VERSION }}-jvm
