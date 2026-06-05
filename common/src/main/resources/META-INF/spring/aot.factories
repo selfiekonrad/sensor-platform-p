@@ -1,0 +1,3 @@
+org.springframework.aot.hint.RuntimeHintsRegistrar=\
+com.ceniuch.common.config.ValidatorLoggingRuntimeHints,\
+com.ceniuch.common.config.MessagingRuntimeHints

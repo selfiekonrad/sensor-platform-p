@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sensor-data-processing-service
+  labels:
+    app: sensor-data-processing-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sensor-data-processing-service
+  template:
+    metadata:
+      name: sensor-data-processing-service
+      labels:
+        app: sensor-data-processing-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sensor-data-processing-service
+          image: sensor-data-processing-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 7676
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 7676
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 7676
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 7676
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 192Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          env:
+            - name: RABBIT_HOST
+              valueFrom:
+                secretKeyRef:
+                  key: host
+                  name: my-rabbit-default-user
+            - name: RABBIT_PORT
+              valueFrom:
+                secretKeyRef:
+                  key: port
+                  name: my-rabbit-default-user
+            - name: RABBIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: my-rabbit-default-user
+            - name: RABBIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: my-rabbit-default-user
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  key: db_url
+                  name: credentials-db
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: db_username
+                  name: credentials-db
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db_password
+                  name: credentials-db
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sensor-data-processing-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sensor-data-processing-service
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 40

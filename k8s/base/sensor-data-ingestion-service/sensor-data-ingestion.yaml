@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sensor-data-ingestion-service
+  labels:
+    app: sensor-data-ingestion-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sensor-data-ingestion-service
+  template:
+    metadata:
+      name: sensor-data-ingestion-service
+      labels:
+        app: sensor-data-ingestion-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sensor-data-ingestion-service
+          image: sensor-data-ingestion-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 3435
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 3435
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 3435
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 3435
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: RABBIT_HOST
+              valueFrom:
+                secretKeyRef:
+                  key: host
+                  name: my-rabbit-default-user
+            - name: RABBIT_PORT
+              valueFrom:
+                secretKeyRef:
+                  key: port
+                  name: my-rabbit-default-user
+            - name: RABBIT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: my-rabbit-default-user
+            - name: RABBIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: my-rabbit-default-user
+            - name: MANAGEMENT_SERVICE_URL
+              value: http://sensor-management-service:80
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sensor-data-ingestion-service
+  labels:
+    app: sensor-data-ingestion-service
+spec:
+  type: ClusterIP
+  selector:
+    app: sensor-data-ingestion-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3435
+      protocol: TCP

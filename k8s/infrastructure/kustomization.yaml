@@ -1,0 +1,3 @@
+resources:
+  - rabbitmq/rabbitmq-operator.yaml
+  - metrics-server

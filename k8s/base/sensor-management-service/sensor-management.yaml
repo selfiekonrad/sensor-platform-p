@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sensor-management-service
+  labels:
+    app: sensor-management-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sensor-management-service
+  template:
+    metadata:
+      name: sensor-management-service
+      labels:
+        app: sensor-management-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sensor-management-service
+          image: sensor-management-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8081
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  key: db_url
+                  name: credentials-db
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  key: db_username
+                  name: credentials-db
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: db_password
+                  name: credentials-db
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sensor-management-service
+  labels:
+    app: sensor-management-service
+spec:
+  type: ClusterIP
+  selector:
+    app: sensor-management-service
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8081
+      protocol: TCP

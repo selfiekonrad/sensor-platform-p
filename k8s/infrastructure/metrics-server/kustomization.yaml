@@ -1,0 +1,21 @@
+# metrics-server provides the metrics.k8s.io aggregated API that the
+# HorizontalPodAutoscaler needs for CPU-based scaling. Without it the HPA fails
+# with "unable to fetch metrics from resource metrics API ... pods.metrics.k8s.io".
+#
+# --kubelet-insecure-tls is required on kind: kind kubelets serve certs that
+# metrics-server cannot verify against the cluster CA, so without this flag the
+# pod runs but never becomes Ready and the HPA target stays <unknown>.
+resources:
+  - https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: metrics-server
+      namespace: kube-system
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls

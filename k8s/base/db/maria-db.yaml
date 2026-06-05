@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: maria-db
+  namespace: sensor-platform
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: maria-db
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maria-db
+  namespace: sensor-platform
+spec:
+  selector:
+    matchLabels:
+      app: maria-db
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      namespace: sensor-platform
+      labels:
+        app: maria-db
+    spec:
+      containers:
+        - image: mariadb:latest
+          name: maria-db
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: password
+            - name: MYSQL_DATABASE
+              value: sensor-platform
+            - name: MYSQL_USER
+              value: user
+            - name: MYSQL_PASSWORD
+              value: password
+          ports:
+            - containerPort: 3306
+              name: maria-db
