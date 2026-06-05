@@ -17,16 +17,16 @@ resources:
 images:
   - name: sensor-data-ingestion-service
     newName: ghcr.io/selfiekonrad/sensor-data-ingestion-service
-    newTag: "0.1.1"
+    newTag: "0.1.2"
   - name: sensor-data-processing-service
     newName: ghcr.io/selfiekonrad/sensor-data-processing-service
-    newTag: "0.1.1"
+    newTag: "0.1.2"
   - name: sensor-data-processing-service-jvm
     newName: ghcr.io/selfiekonrad/sensor-data-processing-service
-    newTag: "0.1.1-jvm"
+    newTag: "0.1.2-jvm"
   - name: sensor-management-service
     newName: ghcr.io/selfiekonrad/sensor-management-service
-    newTag: "0.1.1"
+    newTag: "0.1.2"
   - name: sensor-query-service
     newName: ghcr.io/selfiekonrad/sensor-query-service
-    newTag: "0.1.1"
+    newTag: "0.1.2"
